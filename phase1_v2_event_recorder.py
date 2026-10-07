@@ -81,42 +81,44 @@ async def process_trades(pool):
     global current_price, cumulative_cvd
     uri = "wss://stream.binance.com:9443/ws/btcusdt@aggTrade"
     
-    async with websockets.connect(uri) as websocket:
-        while True:
-            try:
-                data = json.loads(await websocket.recv())
-                ts, price, qty, is_seller = time.time(), float(data['p']), float(data['q']), data['m']
-                
-                current_price = price
-                cumulative_cvd += -qty if is_seller else qty
-                trade_buffer.append({'ts': ts, 'price': price, 'qty': qty, 'is_seller': is_seller})
-                
-                # Insert into Supabase async pool
-                async with pool.acquire() as conn:
-                    await conn.execute("INSERT INTO raw_trades (ts, price, qty, is_seller) VALUES ($1, $2, $3, $4)", ts, price, qty, is_seller)
-            except:
-                await asyncio.sleep(1)
+    while True:
+        try:
+            async with websockets.connect(uri) as websocket:
+                while True:
+                    data = json.loads(await websocket.recv())
+                    ts, price, qty, is_seller = time.time(), float(data['p']), float(data['q']), data['m']
+                    
+                    current_price = price
+                    cumulative_cvd += -qty if is_seller else qty
+                    trade_buffer.append({'ts': ts, 'price': price, 'qty': qty, 'is_seller': is_seller})
+                    
+                    # Insert into Supabase async pool
+                    async with pool.acquire() as conn:
+                        await conn.execute("INSERT INTO raw_trades (ts, price, qty, is_seller) VALUES ($1, $2, $3, $4)", ts, price, qty, is_seller)
+        except Exception as e:
+            await asyncio.sleep(2)
 
 async def process_depth():
     global buy_wall_price, buy_wall_size, sell_wall_price, sell_wall_size
     global local_liquidity_bids, local_liquidity_asks
     
     uri = "wss://stream.binance.com:9443/ws/btcusdt@depth20@100ms"
-    async with websockets.connect(uri) as websocket:
-        while True:
-            try:
-                data = json.loads(await websocket.recv())
-                
-                max_bid = max(data['bids'], key=lambda x: float(x[1]))
-                buy_wall_price, buy_wall_size = float(max_bid[0]), float(max_bid[1])
-                
-                max_ask = max(data['asks'], key=lambda x: float(x[1]))
-                sell_wall_price, sell_wall_size = float(max_ask[0]), float(max_ask[1])
-                
-                local_liquidity_bids = sum([float(b[1]) for b in data['bids']])
-                local_liquidity_asks = sum([float(a[1]) for a in data['asks']])
-            except:
-                await asyncio.sleep(1)
+    while True:
+        try:
+            async with websockets.connect(uri) as websocket:
+                while True:
+                    data = json.loads(await websocket.recv())
+                    
+                    max_bid = max(data['bids'], key=lambda x: float(x[1]))
+                    buy_wall_price, buy_wall_size = float(max_bid[0]), float(max_bid[1])
+                    
+                    max_ask = max(data['asks'], key=lambda x: float(x[1]))
+                    sell_wall_price, sell_wall_size = float(max_ask[0]), float(max_ask[1])
+                    
+                    local_liquidity_bids = sum([float(b[1]) for b in data['bids']])
+                    local_liquidity_asks = sum([float(a[1]) for a in data['asks']])
+        except Exception as e:
+            await asyncio.sleep(2)
 
 # --- FEATURE ENGINE ---
 def get_cvd_over_window(seconds, current_ts):
