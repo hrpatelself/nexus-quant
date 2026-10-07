@@ -143,17 +143,20 @@ async def snapshot_engine(pool):
         imbalance = local_liquidity_bids / (local_liquidity_bids + local_liquidity_asks) if (local_liquidity_bids + local_liquidity_asks) > 0 else 0.5
         event_id = f"EVT_{uuid.uuid4().hex[:8].upper()}"
         
-        async with pool.acquire() as conn:
-            await conn.execute('''INSERT INTO micro_events 
-                (event_id, ts, price, cvd_total, cvd_5s, cvd_15s, cvd_30s, 
-                 buy_wall_price, buy_wall_size, sell_wall_price, sell_wall_size, imbalance,
-                 local_liquidity_bids, local_liquidity_asks)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)''',
-                event_id, now, current_price, cumulative_cvd, cvd_5s, cvd_15s, cvd_30s,
-                buy_wall_price, buy_wall_size, sell_wall_price, sell_wall_size, imbalance,
-                local_liquidity_bids, local_liquidity_asks)
-                
-        event_buffer.append({'event_id': event_id, 'ts': now, 'price': current_price})
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute('''INSERT INTO micro_events 
+                    (event_id, ts, price, cvd_total, cvd_5s, cvd_15s, cvd_30s, 
+                     buy_wall_price, buy_wall_size, sell_wall_price, sell_wall_size, imbalance,
+                     local_liquidity_bids, local_liquidity_asks)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)''',
+                    event_id, now, current_price, cumulative_cvd, cvd_5s, cvd_15s, cvd_30s,
+                    buy_wall_price, buy_wall_size, sell_wall_price, sell_wall_size, imbalance,
+                    local_liquidity_bids, local_liquidity_asks)
+                    
+            event_buffer.append({'event_id': event_id, 'ts': now, 'price': current_price})
+        except Exception as e:
+            print(f"⚠️ Snapshot DB Error: {e}")
 
 # --- LABELING ENGINE ---
 async def labeling_engine(pool):
@@ -181,12 +184,15 @@ async def labeling_engine(pool):
             mfe_60s = ((max(prices) - entry_price) / entry_price) * 100
             mae_60s = ((min(prices) - entry_price) / entry_price) * 100
                 
-            async with pool.acquire() as conn:
-                await conn.execute('''UPDATE micro_events 
-                    SET ret_5s=$1, ret_30s=$2, ret_60s=$3, mfe_60s=$4, mae_60s=$5 
-                    WHERE event_id=$6''', ret_5s, ret_30s, ret_60s, mfe_60s, mae_60s, event_id)
-            
-            print(f"✅ Cloud Saved {event_id} | +60s Ret: {ret_60s:+.3f}% | Imb: {imbalance:.2f}")
+            try:
+                async with pool.acquire() as conn:
+                    await conn.execute('''UPDATE micro_events 
+                        SET ret_5s=$1, ret_30s=$2, ret_60s=$3, mfe_60s=$4, mae_60s=$5 
+                        WHERE event_id=$6''', ret_5s, ret_30s, ret_60s, mfe_60s, mae_60s, event_id)
+                
+                print(f"✅ Cloud Saved {event_id} | +60s Ret: {ret_60s:+.3f}% | Imb: {imbalance:.2f}")
+            except Exception as e:
+                print(f"⚠️ Labeling DB Error: {e}")
 
 async def main():
     print("==================================================")
