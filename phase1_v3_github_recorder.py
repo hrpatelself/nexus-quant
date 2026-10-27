@@ -36,7 +36,7 @@ app = Flask("")
 @app.route('/')
 def home():
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    return f"NEXUS GitHub Archiver is LIVE 24/7! | Status: Active | Server Time: {now_utc}"
+    return f"NEXUS Cloud Database Engine is LIVE 24/7! | Status: Active | Server Time: {now_utc}"
 
 def run_server():
     port = int(os.environ.get("PORT", 8080))
